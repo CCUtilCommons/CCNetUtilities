@@ -1,6 +1,10 @@
 # Prerequisites
 *.d
 
+# Builds
+build/
+.vscode
+.cache
 # Compiled Object files
 *.slo
 *.lo

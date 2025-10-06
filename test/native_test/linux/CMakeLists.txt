@@ -1,0 +1,3 @@
+add_easy_c_executable(simple_client)
+add_easy_c_executable(simple_server)
+add_easy_c_executable(epoll_test)

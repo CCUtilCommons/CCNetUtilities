@@ -1,0 +1,2 @@
+add_easy_cpp_executable(coro_echo)
+target_link_libraries(coro_echo PRIVATE CoroSysSocket)
