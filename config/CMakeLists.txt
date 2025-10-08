@@ -10,11 +10,9 @@ configure_file(
     COPYONLY
 )
 
-
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/implement/coro_platform_impl.h"
     "${CMAKE_BINARY_DIR}/platform/implement/coro_platform_impl.h"
     COPYONLY
 )
-
 

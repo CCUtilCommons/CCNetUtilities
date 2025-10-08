@@ -1,2 +1,0 @@
-add_easy_cpp_executable(http_example)
-target_link_libraries(http_example PRIVATE CoroSysSocket)

@@ -1,0 +1,1 @@
+{ printf 'POST /echo HTTP/1.1\r\n'; printf 'Host: 127.0.0.1:7000\r\n'; printf 'Transfer-Encoding: chunked\r\n'; printf 'Content-Type: text/plain\r\n'; printf '\r\n'; printf '4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n'; sleep 1; } | nc 127.0.0.1 7000

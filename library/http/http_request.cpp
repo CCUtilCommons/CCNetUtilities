@@ -1,12 +1,16 @@
 #include "http_request.h"
+#include "compare_helper.hpp"
 #include "copy_helpers.hpp"
+#include "http_defines.h"
 #include "http_exceptions.h"
 #include "http_version.hpp"
+#include "json_helper/json_to_http.h"
 #include "methods.h"
 #include <cstddef>
 #include <optional>
 #include <sstream>
 #include <string>
+#include <sys/types.h>
 
 namespace {
 
@@ -38,7 +42,127 @@ std::optional<std::string> consume_line(
 	return result;
 }
 
+/**
+ * @brief Force to decode %XX and + -> space
+ *
+ * @param s
+ * @return std::string
+ */
+std::string url_decode(const std::string& s) {
+	std::string decoded_url;
+	// pre-allocate the decodeds
+	decoded_url.reserve(s.size());
+
+	for (size_t i = 0; i < s.size(); ++i) {
+		char c = s[i];
+		if (c == '+') {
+			decoded_url.push_back(' '); // emplace with ' '
+		} else if (c == '%' && i + 2 < s.size()) {
+			auto hs = s.substr(i + 1, 2);
+			unsigned int val = 0;
+			std::istringstream iss(hs);
+			if (!(iss >> std::hex >> val)) {
+				throw CNetUtils::http::UrlDecodingError("Decoding failed when attempting with " + s);
+			}
+			decoded_url.push_back(static_cast<char>(val));
+			i += 2;
+		} else {
+			decoded_url.push_back(c);
+		}
+	}
+	return decoded_url;
 }
+
+CNetUtils::http::Request::query_map_t
+filled_params_query(const std::string& src) {
+	using query_map_t = CNetUtils::http::Request::query_map_t;
+	using request_key_t = CNetUtils::http::Request::request_key_t;
+	using request_value_t = CNetUtils::http::Request::request_value_t;
+
+	query_map_t query_pair;
+	size_t position = 0;
+	const size_t max_len = src.size();
+	while (position < max_len) {
+		auto amp = src.find('&', position);
+		size_t end = (amp == std::string::npos) ? src.size() : amp;
+		auto equal_splits = src.find('=', position);
+
+		if (equal_splits != std::string::npos && equal_splits < end) {
+			// Ok, these is valid
+			request_key_t key = src.substr(position, equal_splits - position);
+			request_value_t value = src.substr(equal_splits + 1, end - equal_splits - 1);
+			query_pair[std::move(url_decode(key))].emplace_back(std::move(url_decode(value)));
+		} else {
+			// key without value
+			request_key_t key = src.substr(position, end - position);
+			query_pair[std::move(url_decode(key))].emplace_back(std::string {});
+		}
+
+		if (amp == std::string::npos)
+			break;
+		position = amp + 1;
+	}
+
+	return query_pair;
+}
+
+std::optional<CNetUtils::http::Request::query_map_t>
+parse_multipart_formdata(const std::string& body_block,
+                         const std::string& content_type_header) {
+	CNetUtils::http::Request::query_map_t form;
+	/**
+	 * @brief We first need to find the boundary
+	 *
+	 */
+	auto bpos = content_type_header.find("boundary=");
+	if (bpos == std::string::npos)
+		return std::nullopt; // invalid
+
+	std::string boundary = "--" + content_type_header.substr(bpos + 9);
+	size_t pos = 0;
+
+	while (true) {
+		size_t start = body_block.find(boundary, pos);
+		if (start == std::string::npos)
+			break;
+		start += boundary.size();
+		// handle final boundary that ends with "--"
+		if (start + 2 <= body_block.size() && body_block.substr(start, 2) == "--")
+			break;
+		if (start + 2 <= body_block.size() && body_block.substr(start, 2) == "\r\n")
+			start += 2;
+
+		size_t end = body_block.find(boundary, start);
+		if (end == std::string::npos)
+			break;
+		std::string part = body_block.substr(start, end - start);
+		// split part headers / body by \r\n\r\n
+		auto sep = part.find(CNetUtils::http::ALL_SEG_TERMINATE);
+		if (sep == std::string::npos) {
+			pos = end;
+			continue;
+		}
+		std::string part_headers = part.substr(0, sep);
+		std::string part_body = part.substr(sep + 4);
+		// remove trailing CRLF if present
+		if (part_body.size() >= 2 && part_body.substr(part_body.size() - 2) == "\r\n")
+			part_body.resize(part_body.size() - 2);
+
+		// find name="..."
+		auto name_pos = part_headers.find("name=\"");
+		if (name_pos != std::string::npos) {
+			size_t name_start = name_pos + 6;
+			auto name_end = part_headers.find('"', name_start);
+			if (name_end != std::string::npos) {
+				std::string name = part_headers.substr(name_start, name_end - name_start);
+				form[name].push_back(part_body);
+			}
+		}
+		pos = end;
+	}
+	return form;
+}
+};
 
 namespace CNetUtils::http {
 
@@ -77,7 +201,17 @@ Request::Request(const std::string& header_block) {
 			    "Can not parse method, method is unsupported: " + method_string);
 		}
 
-		this->path = request_string; // request string assigned
+		auto qpos = request_string.find('?');
+		if (qpos != std::string::npos) {
+			// OK we owns the keys
+			std::string qs = request_string.substr(qpos + 1);
+			this->path = request_string.substr(0, qpos);
+			this->from_url_params = std::move(filled_params_query(qs));
+		} else {
+			// ok we dont :)
+			this->path = request_string;
+		}
+
 		this->version = from_string(version_string);
 		if (is_invalid_http_version(this->version)) {
 			throw HttpRequestParseError(
@@ -158,6 +292,30 @@ Request::Request(const std::string& header_block) {
 	if (is_long_connections.has_value()) {
 		std::string c = CNetUtils::to_lower_copy(*is_long_connections);
 		this->isKeepAlive = (c == "keep-alive");
+	} else {
+		// fallbacks, if not HttpVersion::V1_0
+		// we default opens the keep alive
+		this->isKeepAlive = (this->version != HttpVersion::V1_0);
+	}
+}
+
+void Request::consume_form_body(const std::string& form_body) {
+	auto content_type = headers.get("content-type");
+	if (!content_type.has_value())
+		return; // we dont need to consume the body
+	auto ct_value = *content_type;
+	if (content_type_contains(ct_value, "application/x-www-form-urlencoded")) {
+		// Parse as kv pairs
+		this->from_form = std::move(filled_params_query(form_body));
+	} else if (content_type_contains(ct_value, "multipart/form-data")) {
+		auto result = parse_multipart_formdata(form_body, ct_value);
+		if (!result.has_value()) {
+			throw FailedParseForm("Failed to parse forms, these might be failed to find boundary key...");
+		} else {
+			this->from_form = std::move(*result);
+		}
+	} else if (content_type_contains(ct_value, "application/json")) {
+		this->from_form = std::move(from_json_string(form_body));
 	}
 }
 

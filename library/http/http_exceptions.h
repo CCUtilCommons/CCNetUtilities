@@ -61,34 +61,49 @@ namespace http {
 		}
 	};
 
+#define DECLEAR_DEFAULT_EXCEPTIONS(ExceptionType) \
+	class ExceptionType : public HttpException {  \
+	public:                                       \
+		using HttpException::HttpException;       \
+	}
+
 	/**
 	 * @brief   HttpRequestParseError damns happens when in
 	 *          parsing the http request parsing sessions
 	 */
-	class HttpRequestParseError : public HttpException {
-	public:
-		using HttpException::HttpException;
-	};
+	DECLEAR_DEFAULT_EXCEPTIONS(HttpRequestParseError);
 
-	class HttpHeaderTooLarge : public HttpException {
-	public:
-		using HttpException::HttpException;
-	};
+	/**
+	 * @brief HttpHeaderTooLarge throws when the header incomes overflow
+	 *
+	 */
+	DECLEAR_DEFAULT_EXCEPTIONS(HttpHeaderTooLarge);
 
-	class HttpReaderBodyError : public HttpException {
-	public:
-		using HttpException::HttpException;
-	};
+	/**
+	 * @brief HttpReaderBodyError throws when the body parse fatals
+	 *
+	 */
+	DECLEAR_DEFAULT_EXCEPTIONS(HttpReaderBodyError);
 
-	class HttpChunkError : public HttpException {
-	public:
-		using HttpException::HttpException;
-	};
+	/**
+	 * @brief When in chunks modes
+	 *
+	 */
+	DECLEAR_DEFAULT_EXCEPTIONS(HttpChunkError);
 
-	class HttpRequestPathError : public HttpException {
-	public:
-		using HttpException::HttpException;
-	};
+	/**
+	 * @brief HttpRequestPathError hanpens in parsing request path
+	 *
+	 */
+	DECLEAR_DEFAULT_EXCEPTIONS(HttpRequestPathError);
+
+	/**
+	 * @brief UrlDecodingError happens when decodings fatal
+	 *
+	 */
+	DECLEAR_DEFAULT_EXCEPTIONS(UrlDecodingError);
+
+	DECLEAR_DEFAULT_EXCEPTIONS(FailedParseForm);
 
 }
 }

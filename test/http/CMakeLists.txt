@@ -1,0 +1,3 @@
+add_easy_cpp_executable(test_http_request)
+
+target_link_libraries(test_http_request PRIVATE CoroHttp)
