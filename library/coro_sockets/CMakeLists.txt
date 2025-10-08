@@ -1,4 +1,4 @@
-print_banner("Configure SimpleSysSocket")
+message("Configure CoroSysSocket")
 add_library(CoroSysSocket coro_sys_socket.cpp coro_helper.cpp)
 target_include_directories(
     CoroSysSocket PUBLIC 

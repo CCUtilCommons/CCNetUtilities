@@ -1,1 +1,2 @@
 add_subdirectory(coro_example)
+add_subdirectory(http_example)

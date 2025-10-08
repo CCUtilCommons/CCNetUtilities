@@ -1,4 +1,4 @@
-print_banner("Configure SimpleSysSocket")
+message("Configure SimpleSysSocket")
 add_library(SimpleSyncSocket sys_socket.cpp socket_address.cpp)
 target_include_directories(
     SimpleSyncSocket PUBLIC 

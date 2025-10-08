@@ -1,2 +1,5 @@
 add_easy_cpp_executable(coro_echo)
 target_link_libraries(coro_echo PRIVATE CoroSysSocket)
+
+add_easy_cpp_executable(coro_http_example)
+target_link_libraries(coro_http_example PRIVATE CoroHttp)
